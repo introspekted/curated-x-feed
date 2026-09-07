@@ -1,0 +1,9 @@
+node_modules/
+.wrangler/
+.devtools/
+dist/
+.dev.vars
+.DS_Store
+*.log
+.mf/
+wrangler.toml.bak

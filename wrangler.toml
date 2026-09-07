@@ -1,0 +1,19 @@
+name = "curated-x-feed"
+main = "src/index.ts"
+compatibility_date = "2024-12-18"
+
+[vars]
+APP_NAME = "Curated X Feed"
+
+# --- Cloudflare KV (optional for local UI; recommended for deploy) ---
+# Create namespaces:
+#   npx wrangler kv namespace create HANDLES
+#   npx wrangler kv namespace create HANDLES --preview
+# Then uncomment and paste the ids:
+#
+# [[kv_namespaces]]
+# binding = "HANDLES"
+# id = "<production_namespace_id>"
+# preview_id = "<preview_namespace_id>"
+#
+# Without KV, the UI still works via browser localStorage.
