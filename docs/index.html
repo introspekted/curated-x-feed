@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Curated X Feed</title>
+  <meta name="description" content="Curated X/Twitter feed using official profile embeds — no API keys." />
+  <meta name="color-scheme" content="dark" />
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --bg-elevated: #121821;
+      --bg-card: #161d27;
+      --border: #243041;
+      --text: #e8eef7;
+      --muted: #8b9bb0;
+      --accent: #1d9bf0;
+      --accent-hover: #4cb3f5;
+      --danger: #f07178;
+      --danger-hover: #ff8a90;
+      --success: #7fd99a;
+      --radius: 14px;
+      --shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, rgba(29, 155, 240, 0.12), transparent 60%),
+        radial-gradient(900px 500px at 100% 0%, rgba(127, 217, 154, 0.08), transparent 55%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    a { color: var(--accent); }
+    .wrap {
+      width: min(1200px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 1.5rem 0 3rem;
+    }
+    header.app-header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+    .brand h1 {
+      margin: 0 0 0.35rem;
+      font-size: clamp(1.4rem, 2.5vw, 1.85rem);
+      letter-spacing: -0.02em;
+    }
+    .brand p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+      max-width: 42rem;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(29, 155, 240, 0.08);
+      color: var(--muted);
+      font-size: 0.75rem;
+      margin-top: 0.75rem;
+    }
+    .badge .dot {
+      width: 0.45rem;
+      height: 0.45rem;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px rgba(127, 217, 154, 0.7);
+    }
+    .panel {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1rem;
+      margin-bottom: 1.25rem;
+    }
+    .controls { display: grid; gap: 0.75rem; }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      align-items: center;
+    }
+    label.sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    input[type="text"] {
+      flex: 1 1 220px;
+      min-width: 0;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 0.7rem 0.9rem;
+      font-size: 1rem;
+      outline: none;
+    }
+    input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(29, 155, 240, 0.2);
+    }
+    button, .chip {
+      appearance: none;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      font: inherit;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+    }
+    button:active { transform: translateY(1px); }
+    .btn {
+      background: var(--accent);
+      color: #041018;
+      font-weight: 650;
+      padding: 0.7rem 1rem;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--border);
+      padding: 0.55rem 0.8rem;
+    }
+    .btn-ghost:hover { border-color: var(--muted); }
+    .btn-danger {
+      background: transparent;
+      color: var(--danger);
+      border-color: rgba(240, 113, 120, 0.35);
+      padding: 0.4rem 0.65rem;
+      font-size: 0.85rem;
+    }
+    .btn-danger:hover {
+      background: rgba(240, 113, 120, 0.1);
+      border-color: var(--danger-hover);
+      color: var(--danger-hover);
+    }
+    .status {
+      min-height: 1.25rem;
+      font-size: 0.875rem;
+      color: var(--muted);
+    }
+    .status.error { color: var(--danger); }
+    .status.ok { color: var(--success); }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .chip {
+      background: var(--bg-card);
+      color: var(--text);
+      border-color: var(--border);
+      padding: 0.4rem 0.75rem;
+      font-size: 0.875rem;
+    }
+    .chip:hover {
+      border-color: var(--accent);
+      color: var(--accent-hover);
+    }
+    .handle-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .handle-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.25rem 0.35rem 0.25rem 0.75rem;
+      font-size: 0.9rem;
+    }
+    .handle-pill span { color: var(--muted); }
+    .feed-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+      gap: 1rem;
+    }
+    .embed-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 420px;
+    }
+    .embed-card header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.75rem 0.9rem;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .embed-card h2 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 650;
+    }
+    .embed-card .body {
+      flex: 1;
+      padding: 0.75rem;
+      position: relative;
+      min-height: 360px;
+    }
+    .embed-fallback {
+      display: none;
+      position: absolute;
+      inset: 0.75rem;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      color: var(--muted);
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .embed-fallback.visible { display: block; }
+    .embed-fallback a { font-weight: 600; }
+    .empty {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: var(--muted);
+    }
+    .empty h2 {
+      margin: 0 0 0.5rem;
+      color: var(--text);
+      font-size: 1.25rem;
+    }
+    footer.note {
+      margin-top: 2rem;
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-align: center;
+    }
+    .drag-hint { color: var(--muted); font-size: 0.8rem; }
+    @media (max-width: 640px) {
+      .wrap { width: min(100%, calc(100% - 1.25rem)); padding-top: 1rem; }
+      .embed-card { min-height: 360px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="app-header">
+      <div class="brand">
+        <h1>Curated X Feed</h1>
+        <p>Official X profile timeline embeds for accounts you curate. No X API keys, no scraping — just widgets.js.</p>
+        <div class="badge"><span class="dot" aria-hidden="true"></span> Privacy-friendly · GitHub Pages · localStorage</div>
+      </div>
+    </header>
+
+    <section class="panel" aria-label="Manage accounts">
+      <div class="controls">
+        <form id="add-form" class="row" autocomplete="off">
+          <label class="sr-only" for="handle-input">X handle</label>
+          <input id="handle-input" type="text" name="handle" placeholder="@handle" maxlength="16" required />
+          <button class="btn" type="submit" id="add-btn">Add account</button>
+        </form>
+        <div class="status" id="status" role="status" aria-live="polite"></div>
+        <div>
+          <div class="drag-hint" style="margin-bottom:0.5rem">Quick add examples</div>
+          <div class="chips" id="examples"></div>
+        </div>
+        <div>
+          <div class="drag-hint" style="margin-bottom:0.5rem">Your list <span id="storage-mode"></span></div>
+          <ul class="handle-list" id="handle-list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <main id="feed" class="feed-grid" aria-live="polite"></main>
+    <div class="empty" id="empty" hidden>
+      <h2>No accounts yet</h2>
+      <p>Add an X handle above, or tap an example to get started.</p>
+    </div>
+
+    <footer class="note">
+      Timelines are loaded from platform.twitter.com. If an embed is blocked by a network or extension, use the profile link fallback.
+    </footer>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "curated-x-feed:handles";
+    const EXAMPLES = ["github", "OpenAI", "vercel", "Cloudflare", "honojs"];
+    const state = { handles: [], ready: false };
+
+    const els = {
+      form: document.getElementById("add-form"),
+      input: document.getElementById("handle-input"),
+      status: document.getElementById("status"),
+      examples: document.getElementById("examples"),
+      list: document.getElementById("handle-list"),
+      feed: document.getElementById("feed"),
+      empty: document.getElementById("empty"),
+      storageMode: document.getElementById("storage-mode"),
+      addBtn: document.getElementById("add-btn"),
+    };
+
+    function normalizeHandle(raw) {
+      const cleaned = String(raw || "").trim().replace(/^@+/, "");
+      if (!/^[A-Za-z0-9_]{1,15}$/.test(cleaned)) return null;
+      return cleaned;
+    }
+
+    function setStatus(msg, kind) {
+      els.status.textContent = msg || "";
+      els.status.className = "status" + (kind ? " " + kind : "");
+    }
+
+    function readLocal() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.map(normalizeHandle).filter(Boolean);
+      } catch {
+        return [];
+      }
+    }
+
+    function writeLocal(handles) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(handles));
+        els.storageMode.textContent = "(saved in this browser)";
+      } catch {
+        els.storageMode.textContent = "(could not write localStorage)";
+        throw new Error("localStorage is unavailable in this browser.");
+      }
+    }
+
+    function renderExamples() {
+      els.examples.innerHTML = "";
+      for (const ex of EXAMPLES) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chip";
+        btn.textContent = "@" + ex;
+        btn.addEventListener("click", () => addHandle(ex));
+        els.examples.appendChild(btn);
+      }
+    }
+
+    function renderList() {
+      els.list.innerHTML = "";
+      for (const handle of state.handles) {
+        const li = document.createElement("li");
+        li.className = "handle-pill";
+        li.innerHTML = "<span>@</span>" + handle;
+        const rm = document.createElement("button");
+        rm.type = "button";
+        rm.className = "btn-danger";
+        rm.setAttribute("aria-label", "Remove @" + handle);
+        rm.textContent = "Remove";
+        rm.addEventListener("click", () => removeHandle(handle));
+        li.appendChild(rm);
+        els.list.appendChild(li);
+      }
+    }
+
+    function ensureWidgets(cb) {
+      if (window.twttr && window.twttr.widgets) {
+        cb();
+        return;
+      }
+      const existing = document.querySelector('script[data-curated-x-widgets="1"]');
+      if (existing) {
+        existing.addEventListener("load", () => cb());
+        return;
+      }
+      const s = document.createElement("script");
+      s.src = "https://platform.twitter.com/widgets.js";
+      s.async = true;
+      s.charset = "utf-8";
+      s.dataset.curatedXWidgets = "1";
+      s.addEventListener("load", () => cb());
+      s.addEventListener("error", () => {
+        document.querySelectorAll(".embed-fallback").forEach((el) => el.classList.add("visible"));
+        setStatus("Could not load X widgets.js — showing profile links instead.", "error");
+      });
+      document.body.appendChild(s);
+    }
+
+    function renderFeed() {
+      els.feed.innerHTML = "";
+      const empty = state.handles.length === 0;
+      els.empty.hidden = !empty;
+      els.feed.hidden = empty;
+      if (empty) return;
+
+      for (const handle of state.handles) {
+        const card = document.createElement("article");
+        card.className = "embed-card";
+        card.dataset.handle = handle;
+
+        const header = document.createElement("header");
+        const title = document.createElement("h2");
+        title.textContent = "@" + handle;
+        const open = document.createElement("a");
+        open.href = "https://x.com/" + encodeURIComponent(handle);
+        open.target = "_blank";
+        open.rel = "noopener noreferrer";
+        open.textContent = "Open profile";
+        header.appendChild(title);
+        header.appendChild(open);
+
+        const body = document.createElement("div");
+        body.className = "body";
+
+        const anchor = document.createElement("a");
+        anchor.className = "twitter-timeline";
+        anchor.href = "https://twitter.com/" + encodeURIComponent(handle) + "?ref_src=twsrc%5Etfw";
+        anchor.setAttribute("data-theme", "dark");
+        anchor.setAttribute("data-chrome", "noheader nofooter noborders transparent");
+        anchor.setAttribute("data-height", "520");
+        anchor.textContent = "Tweets by @" + handle;
+
+        const fallback = document.createElement("div");
+        fallback.className = "embed-fallback";
+        const strong = document.createElement("strong");
+        strong.textContent = "Embed unavailable";
+        const p = document.createElement("p");
+        p.textContent = "X widgets could not load for @" + handle + ". ";
+        const link = document.createElement("a");
+        link.href = "https://x.com/" + encodeURIComponent(handle);
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "View profile on X";
+        p.appendChild(link);
+        fallback.appendChild(strong);
+        fallback.appendChild(p);
+
+        body.appendChild(anchor);
+        body.appendChild(fallback);
+        card.appendChild(header);
+        card.appendChild(body);
+        els.feed.appendChild(card);
+      }
+
+      ensureWidgets(() => {
+        try {
+          if (window.twttr && window.twttr.widgets && window.twttr.widgets.load) {
+            window.twttr.widgets.load(els.feed);
+          }
+        } catch (e) {
+          document.querySelectorAll(".embed-fallback").forEach((el) => el.classList.add("visible"));
+        }
+        setTimeout(() => {
+          document.querySelectorAll(".embed-card").forEach((card) => {
+            const iframe = card.querySelector("iframe");
+            const fallback = card.querySelector(".embed-fallback");
+            if (!iframe && fallback) fallback.classList.add("visible");
+          });
+        }, 8000);
+      });
+    }
+
+    function setHandles(handles, persistChange) {
+      if (persistChange === undefined) persistChange = true;
+      const deduped = [];
+      const seen = new Set();
+      for (const h of handles) {
+        const n = normalizeHandle(h);
+        if (!n) continue;
+        const key = n.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(n);
+      }
+      state.handles = deduped;
+      renderList();
+      renderFeed();
+      if (persistChange) {
+        writeLocal(state.handles);
+      }
+    }
+
+    function addHandle(raw) {
+      const handle = normalizeHandle(raw);
+      if (!handle) {
+        setStatus("Handles must be 1–15 characters: letters, numbers, underscore (optional leading @).", "error");
+        return;
+      }
+      if (state.handles.some((h) => h.toLowerCase() === handle.toLowerCase())) {
+        setStatus("@" + handle + " is already in your list.", "error");
+        return;
+      }
+      els.addBtn.disabled = true;
+      try {
+        setHandles(state.handles.concat([handle]));
+        setStatus("Added @" + handle + ".", "ok");
+        els.input.value = "";
+      } catch (e) {
+        setStatus((e && e.message) || "Could not save.", "error");
+      } finally {
+        els.addBtn.disabled = false;
+      }
+    }
+
+    function removeHandle(handle) {
+      try {
+        setHandles(state.handles.filter((h) => h.toLowerCase() !== handle.toLowerCase()));
+        setStatus("Removed @" + handle + ".", "ok");
+      } catch (e) {
+        setStatus((e && e.message) || "Could not save.", "error");
+      }
+    }
+
+    els.form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      addHandle(els.input.value);
+    });
+
+    renderExamples();
+
+    (function init() {
+      const handles = readLocal();
+      els.storageMode.textContent = "(saved in this browser)";
+      setHandles(handles, false);
+      state.ready = true;
+    })();
+  </script>
+</body>
+</html>

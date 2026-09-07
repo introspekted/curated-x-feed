@@ -1,98 +1,70 @@
 # Curated X Feed
 
-A small Cloudflare Workers app that shows a curated list of X/Twitter accounts using official profile timeline embeds (platform.twitter.com widgets.js / publish.twitter.com style).
+A static site that shows a curated list of X/Twitter accounts using official profile timeline embeds (platform.twitter.com widgets.js).
 
 - **No X API keys**
 - **No scraping**
 - Add / remove handles in the UI
-- Persist via **Cloudflare KV** when configured; otherwise **localStorage** so `wrangler dev` works immediately
+- Persist via **browser localStorage**
 - Dark, modern, mobile-friendly UI
-- No auth (v1)
+- Deployed on **GitHub Pages** (no build step)
 
-## Quick start
+**Live:** https://introspekted.github.io/curated-x-feed/
 
-```bash
-npm install
-npm run dev
-```
+## Quick start (local)
 
-Open the URL Wrangler prints (usually `http://127.0.0.1:8787`).
-
-### Deploy
+Open the static page in a browser (any static server works):
 
 ```bash
-npm run deploy
+python3 -m http.server 8080 --directory docs
+# or: npx serve docs
 ```
 
-Optional typecheck:
+Then visit http://127.0.0.1:8080 .
+
+You can also open `docs/index.html` directly as a file URL; localStorage and embeds still work in most browsers.
+
+## Deploy (GitHub Pages)
+
+This repo serves from the **docs/** folder on the **main** branch.
+
+1. Push to `main` (this updates `docs/`).
+2. In the repo: **Settings → Pages → Build and deployment**
+   - Source: **Deploy from a branch**
+   - Branch: **main** / folder **/docs**
+3. Site URL pattern: `https://<user>.github.io/curated-x-feed/`
+
+Pages usually goes live within a minute after the first enable or a new push.
+
+### Enable via gh CLI
 
 ```bash
-npm run typecheck
+gh api repos/introspekted/curated-x-feed/pages -X POST \
+  -f build_type=legacy \
+  -f source[branch]=main \
+  -f source[path]=/docs
 ```
+
+If Pages is already configured, use PATCH instead of POST.
 
 ## Adding accounts
 
 1. Open the app.
-2. Type a handle (@Cloudflare or Cloudflare) and click **Add account**.
+2. Type a handle (`@github` or `github`) and click **Add account**.
 3. Or tap a one-click example chip.
-4. **Remove** from the pill list under “Your list”.
+4. **Remove** from the pill list under "Your list".
 
-Handles are validated as **1-15 characters**, alphanumeric + underscore (leading @ is stripped).
+Handles are validated as **1–15 characters**, alphanumeric + underscore (leading `@` is stripped).
 
 ## Persistence
 
-| Mode | When | Behavior |
-|------|-----|---------|
-| **KV** | `HANDLES` binding configured in `wrangler.toml` | `GET/PUT /api/handles` stores a shared list |
-| **localStorage** | KV missing or API returns 503 | List is kept in the browser; UI still fully works |
+Your curated list is stored in **localStorage** under the key `curated-x-feed:handles`. Clearing site data for this origin will reset the list. There is no server-side sync on the Pages deploy.
 
-### Create a KV namespace
+## X embeds
 
-```bash
-npx wrangler kv namespace create HANDLES
-npx wrangler kv namespace create HANDLES --preview
-```
+Official embeds need third-party scripts and frames from X/Twitter. GitHub Pages does not set a restrictive CSP by default, so `https://platform.twitter.com/widgets.js` can load normally.
 
-Uncomment the `[[kv_namespaces]]` block in `wrangler.toml` and paste the returned ids:
-
-```toml
-[[kv_namespaces]]
-binding = "HANDLES"
-id = "<production_namespace_id>"
-preview_id = "<preview_namespace_id>"
-```
-
-Then redeploy (`npm run deploy`) or restart `npm run dev`.
-
-## Stack
-
-- Cloudflare Workers + Wrangler
-- TypeScript
-- Hono for routing / HTML / JSON API
-
-## API
-
-| Method | Path | Description |
-|--------|-----|------------|
-| `GET` | `/api/health` | Liveness + whether KV is bound |
-| `GET`| `/api/handles` | `{ handles: string[], storage: "kv" }` |
-| `PUT` | `/api/handles` | Body `{ handles: string[] }` (max 50) |
-
-## Content Security Policy & X widgets
-
-Official embeds need third-party scripts and frames from X/Twitter. This app sets a CSP on the HTML response that allows:
-
-| Directive | Needed for |
-|---------|----------|
-| `script-src` • `https://platform.twitter.com` `https://cdn.syndication.twimg.com` | widgets.js and syndication scripts |
-| `frame-src` • `platform.twitter.com` `syndication.twitter.com` `twitter.com` `x.com` | Timeline iframes |
-| `img-src` `https:`  | Avatars / media in embeds |
-| `style-src` `'unsafe-inline'` + Twitter/ton hosts | Widget chrome |
-| `connect-src` syndication / twimg hosts | Widget XHR |
-
- Inline app script/styles use `'unsafe-inline'` for this single-page MVP. If you harden later, move assets to hashed files and drop `unsafe-inline`.
-
-If widgets fail (network, extension, or CSP), each card shows a **profile link fallback**.
+If widgets fail (network, extension, or regional limits), each card shows a **profile link fallback**.
 
 ### Manual embed reference
 
@@ -101,37 +73,19 @@ If widgets fail (network, extension, or CSP), each card shows a **profile link f
    data-theme="dark"
    data-chrome="noheader nofooter noborders transparent"
    data-height="520"
-   href="https://twitter.com/Cloudflare?ref_src=twsrc%5Etfw">
-  Tweets by @Cloudflare
+   href="https://twitter.com/github?ref_src=twsrc%5Etfw">
+  Tweets by @github
 </a>
 <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
 ```
 
 ## Project layout
 
-```
-package.json
-wrangler.toml
-              # Worker config (+ optional KV binding)
-tsconfig.json
-worker-configuration.d.ts
-README.md
-src/index.ts         # Hono worker: page + API
-src/page.ts          # Dark UI + client logic + embeds
-src/validate.ts      # Handle normalization
-src/types.ts         # Env / payload types
-```
-
-## Scripts
-
-| Script | Command |
-|--------|--------|
-| `npm run dev` | `wrangler dev` |
-| `npm run deploy` | `wrangler deploy` |
-| `npm run typecheck` | `tsc --noEmit` |
+Primary app: `docs/index.html` (GitHub Pages).
+Legacy Workers sources remain under `src/` (optional / suspended path).
 
 ## Notes
 
-- Embed appearance is controlled by X’s widget; timelines may be limited for some accounts or regions.
-- Reorder is not in v1 (nice-to-have); order is insert order.
-- Do not commit real secrets; this app does not need an X API key.
+- Embed appearance is controlled by X widgets; timelines may be limited for some accounts or regions.
+- Reorder is not in v1; order is insert order.
+- No X API key required.
