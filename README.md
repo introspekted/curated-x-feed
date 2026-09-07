@@ -1,11 +1,13 @@
 # Curated X Feed
 
-A static site that shows a curated list of X/Twitter accounts using official profile timeline embeds (platform.twitter.com widgets.js).
+A static site that shows curated lists of X/Twitter accounts using official profile timeline embeds (platform.twitter.com widgets.js), organized into **tabs**.
 
 - **No X API keys**
 - **No scraping**
-- Add / remove handles in the UI
-- Persist via **browser localStorage**
+- **Tabs** with per-tab account lists (add / rename / delete)
+- Add / remove handles in the UI (per active tab)
+- Persist via **browser localStorage** (`curated-x-feed-v2`)
+- Migrates the older single-list key (`curated-x-feed:handles`) into a first tab when present
 - Dark, modern, mobile-friendly UI
 - Deployed on **GitHub Pages** (no build step)
 
@@ -47,18 +49,37 @@ gh api repos/introspekted/curated-x-feed/pages -X POST \
 
 If Pages is already configured, use PATCH instead of POST.
 
+## Tabs
+
+- Horizontal tab bar under the header.
+- Each tab has its own handle list, manage UI, and embed feed.
+- Actions: **+ Tab**, **Rename**, **Delete** (keeps at least one tab).
+- Switching tabs tears down and rebuilds embeds so widgets stay clean.
+
+### Starter defaults (first visit only)
+
+When there is no saved `curated-x-feed-v2` state (and no legacy list to migrate):
+
+| Tab | Handles |
+| --- | --- |
+| Tech | OpenAI, AnthropicAI, vercel, github |
+| News | BBCWorld, Reuters, AP |
+| Builders | levelsio, swyx, patrickc |
+
 ## Adding accounts
 
-1. Open the app.
+1. Select a tab.
 2. Type a handle (`@github` or `github`) and click **Add account**.
-3. Or tap a one-click example chip.
+3. Or tap a one-click example chip (shown when the active tab is empty).
 4. **Remove** from the pill list under "Your list".
 
-Handles are validated as **1–15 characters**, alphanumeric + underscore (leading `@` is stripped).
+Handles are validated as **1–15 characters**, alphanumeric + underscore (leading `@` is stripped in storage).
 
 ## Persistence
 
-Your curated list is stored in **localStorage** under the key `curated-x-feed:handles`. Clearing site data for this origin will reset the list. There is no server-side sync on the Pages deploy.
+State is stored in **localStorage** under **`curated-x-feed-v2`** as `{ activeTabId, tabs: [{ id, name, handles }] }`.
+
+If that key is missing, any legacy list under `curated-x-feed:handles` is migrated into a single **My feed** tab. Clearing site data for this origin resets to the starter tabs. There is no server-side sync on the Pages deploy.
 
 ## X embeds
 
@@ -87,5 +108,5 @@ Legacy Workers sources remain under `src/` (optional / suspended path).
 ## Notes
 
 - Embed appearance is controlled by X widgets; timelines may be limited for some accounts or regions.
-- Reorder is not in v1; order is insert order.
+- Handle order within a tab is insert order.
 - No X API key required.

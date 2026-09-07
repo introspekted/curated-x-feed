@@ -47,7 +47,7 @@
       gap: 1rem;
       align-items: flex-start;
       justify-content: space-between;
-      margin-bottom: 1.5rem;
+      margin-bottom: 1rem;
     }
     .brand h1 {
       margin: 0 0 0.35rem;
@@ -78,6 +78,60 @@
       border-radius: 50%;
       background: var(--success);
       box-shadow: 0 0 8px rgba(127, 217, 154, 0.7);
+    }
+    .tabs-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.45rem;
+      margin-bottom: 1.25rem;
+      padding: 0.35rem;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .tabs-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      flex: 1 1 auto;
+      min-width: 0;
+      align-items: center;
+    }
+    .tab {
+      appearance: none;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 10px;
+      font: inherit;
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 0.55rem 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+      white-space: nowrap;
+      max-width: 12rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tab:hover {
+      color: var(--text);
+      border-color: var(--border);
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .tab.active {
+      color: var(--text);
+      background: rgba(29, 155, 240, 0.16);
+      border-color: rgba(29, 155, 240, 0.45);
+    }
+    .tab-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      align-items: center;
+      flex: 0 0 auto;
     }
     .panel {
       background: var(--bg-elevated);
@@ -142,6 +196,7 @@
       color: var(--text);
       border-color: var(--border);
       padding: 0.55rem 0.8rem;
+      font-size: 0.875rem;
     }
     .btn-ghost:hover { border-color: var(--muted); }
     .btn-danger {
@@ -264,6 +319,8 @@
     @media (max-width: 640px) {
       .wrap { width: min(100%, calc(100% - 1.25rem)); padding-top: 1rem; }
       .embed-card { min-height: 360px; }
+      .tabs-bar { padding: 0.4rem; }
+      .tab { padding: 0.5rem 0.7rem; font-size: 0.85rem; }
     }
   </style>
 </head>
@@ -272,10 +329,19 @@
     <header class="app-header">
       <div class="brand">
         <h1>Curated X Feed</h1>
-        <p>Official X profile timeline embeds for accounts you curate. No X API keys, no scraping — just widgets.js.</p>
+        <p>Official X profile timeline embeds for accounts you curate — organized in tabs. No X API keys, no scraping — just widgets.js.</p>
         <div class="badge"><span class="dot" aria-hidden="true"></span> Privacy-friendly · GitHub Pages · localStorage</div>
       </div>
     </header>
+
+    <nav class="tabs-bar" aria-label="Feed tabs">
+      <div class="tabs-list" id="tabs-list" role="tablist"></div>
+      <div class="tab-actions">
+        <button type="button" class="btn-ghost" id="rename-tab-btn" title="Rename active tab">Rename</button>
+        <button type="button" class="btn-ghost" id="delete-tab-btn" title="Delete active tab">Delete</button>
+        <button type="button" class="btn" id="add-tab-btn">+ Tab</button>
+      </div>
+    </nav>
 
     <section class="panel" aria-label="Manage accounts">
       <div class="controls">
@@ -285,7 +351,7 @@
           <button class="btn" type="submit" id="add-btn">Add account</button>
         </form>
         <div class="status" id="status" role="status" aria-live="polite"></div>
-        <div>
+        <div id="examples-wrap">
           <div class="drag-hint" style="margin-bottom:0.5rem">Quick add examples</div>
           <div class="chips" id="examples"></div>
         </div>
@@ -308,20 +374,37 @@
   </div>
 
   <script>
-    const STORAGE_KEY = "curated-x-feed:handles";
+    const STORAGE_KEY_V2 = "curated-x-feed-v2";
+    const STORAGE_KEY_V1 = "curated-x-feed:handles";
     const EXAMPLES = ["github", "OpenAI", "vercel", "Cloudflare", "honojs"];
-    const state = { handles: [], ready: false };
+    const DEFAULT_TABS = [
+      { id: "tech", name: "Tech", handles: ["OpenAI", "AnthropicAI", "vercel", "github"] },
+      { id: "news", name: "News", handles: ["BBCWorld", "Reuters", "AP"] },
+      { id: "builders", name: "Builders", handles: ["levelsio", "swyx", "patrickc"] },
+    ];
+
+    const state = {
+      tabs: [],
+      activeTabId: null,
+      ready: false,
+      embedEpoch: 0,
+    };
 
     const els = {
       form: document.getElementById("add-form"),
       input: document.getElementById("handle-input"),
       status: document.getElementById("status"),
       examples: document.getElementById("examples"),
+      examplesWrap: document.getElementById("examples-wrap"),
       list: document.getElementById("handle-list"),
       feed: document.getElementById("feed"),
       empty: document.getElementById("empty"),
       storageMode: document.getElementById("storage-mode"),
       addBtn: document.getElementById("add-btn"),
+      tabsList: document.getElementById("tabs-list"),
+      addTabBtn: document.getElementById("add-tab-btn"),
+      renameTabBtn: document.getElementById("rename-tab-btn"),
+      deleteTabBtn: document.getElementById("delete-tab-btn"),
     };
 
     function normalizeHandle(raw) {
@@ -330,26 +413,106 @@
       return cleaned;
     }
 
+    function normalizeHandles(list) {
+      const deduped = [];
+      const seen = new Set();
+      if (!Array.isArray(list)) return deduped;
+      for (const h of list) {
+        const n = normalizeHandle(h);
+        if (!n) continue;
+        const key = n.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(n);
+      }
+      return deduped;
+    }
+
+    function uid() {
+      return "tab-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+    }
+
     function setStatus(msg, kind) {
       els.status.textContent = msg || "";
       els.status.className = "status" + (kind ? " " + kind : "");
     }
 
-    function readLocal() {
+    function activeTab() {
+      return state.tabs.find((t) => t.id === state.activeTabId) || state.tabs[0] || null;
+    }
+
+    function activeHandles() {
+      const tab = activeTab();
+      return tab ? tab.handles.slice() : [];
+    }
+
+    function cloneDefaults() {
+      return DEFAULT_TABS.map((t) => ({
+        id: t.id,
+        name: t.name,
+        handles: t.handles.slice(),
+      }));
+    }
+
+    function readV1Handles() {
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return [];
+        const raw = localStorage.getItem(STORAGE_KEY_V1);
+        if (!raw) return null;
         const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return [];
-        return parsed.map(normalizeHandle).filter(Boolean);
+        if (!Array.isArray(parsed)) return null;
+        return normalizeHandles(parsed);
       } catch {
-        return [];
+        return null;
       }
     }
 
-    function writeLocal(handles) {
+    function loadState() {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(handles));
+        const raw = localStorage.getItem(STORAGE_KEY_V2);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length) {
+            const tabs = parsed.tabs
+              .map((t) => ({
+                id: String(t.id || uid()),
+                name: String(t.name || "Tab").trim() || "Tab",
+                handles: normalizeHandles(t.handles),
+              }))
+              .filter((t) => t.id);
+            if (tabs.length) {
+              let activeTabId = parsed.activeTabId;
+              if (!tabs.some((t) => t.id === activeTabId)) activeTabId = tabs[0].id;
+              return { tabs, activeTabId };
+            }
+          }
+        }
+      } catch {
+        /* fall through */
+      }
+
+      const legacy = readV1Handles();
+      if (legacy && legacy.length) {
+        const tab = { id: "migrated", name: "My feed", handles: legacy };
+        return { tabs: [tab], activeTabId: tab.id };
+      }
+
+      const tabs = cloneDefaults();
+      return { tabs, activeTabId: tabs[0].id };
+    }
+
+    function persist() {
+      try {
+        localStorage.setItem(
+          STORAGE_KEY_V2,
+          JSON.stringify({
+            activeTabId: state.activeTabId,
+            tabs: state.tabs.map((t) => ({
+              id: t.id,
+              name: t.name,
+              handles: t.handles.slice(),
+            })),
+          })
+        );
         els.storageMode.textContent = "(saved in this browser)";
       } catch {
         els.storageMode.textContent = "(could not write localStorage)";
@@ -357,33 +520,10 @@
       }
     }
 
-    function renderExamples() {
-      els.examples.innerHTML = "";
-      for (const ex of EXAMPLES) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "chip";
-        btn.textContent = "@" + ex;
-        btn.addEventListener("click", () => addHandle(ex));
-        els.examples.appendChild(btn);
-      }
-    }
-
-    function renderList() {
-      els.list.innerHTML = "";
-      for (const handle of state.handles) {
-        const li = document.createElement("li");
-        li.className = "handle-pill";
-        li.innerHTML = "<span>@</span>" + handle;
-        const rm = document.createElement("button");
-        rm.type = "button";
-        rm.className = "btn-danger";
-        rm.setAttribute("aria-label", "Remove @" + handle);
-        rm.textContent = "Remove";
-        rm.addEventListener("click", () => removeHandle(handle));
-        li.appendChild(rm);
-        els.list.appendChild(li);
-      }
+    function tearDownEmbeds() {
+      state.embedEpoch += 1;
+      // Remove widgets completely so leftover iframes/scripts don't glitch on tab switch.
+      els.feed.innerHTML = "";
     }
 
     function ensureWidgets(cb) {
@@ -409,14 +549,64 @@
       document.body.appendChild(s);
     }
 
+    function renderTabs() {
+      els.tabsList.innerHTML = "";
+      for (const tab of state.tabs) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "tab" + (tab.id === state.activeTabId ? " active" : "");
+        btn.setAttribute("role", "tab");
+        btn.setAttribute("aria-selected", tab.id === state.activeTabId ? "true" : "false");
+        btn.id = "tab-btn-" + tab.id;
+        btn.textContent = tab.name;
+        btn.title = tab.name;
+        btn.addEventListener("click", () => switchTab(tab.id));
+        els.tabsList.appendChild(btn);
+      }
+      els.deleteTabBtn.disabled = state.tabs.length <= 1;
+    }
+
+    function renderExamples() {
+      els.examples.innerHTML = "";
+      for (const ex of EXAMPLES) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chip";
+        btn.textContent = "@" + ex;
+        btn.addEventListener("click", () => addHandle(ex));
+        els.examples.appendChild(btn);
+      }
+    }
+
+    function renderList() {
+      els.list.innerHTML = "";
+      const handles = activeHandles();
+      for (const handle of handles) {
+        const li = document.createElement("li");
+        li.className = "handle-pill";
+        li.innerHTML = "<span>@</span>" + handle;
+        const rm = document.createElement("button");
+        rm.type = "button";
+        rm.className = "btn-danger";
+        rm.setAttribute("aria-label", "Remove @" + handle);
+        rm.textContent = "Remove";
+        rm.addEventListener("click", () => removeHandle(handle));
+        li.appendChild(rm);
+        els.list.appendChild(li);
+      }
+      els.examplesWrap.hidden = handles.length > 0;
+    }
+
     function renderFeed() {
-      els.feed.innerHTML = "";
-      const empty = state.handles.length === 0;
+      tearDownEmbeds();
+      const epoch = state.embedEpoch;
+      const handles = activeHandles();
+      const empty = handles.length === 0;
       els.empty.hidden = !empty;
       els.feed.hidden = empty;
       if (empty) return;
 
-      for (const handle of state.handles) {
+      for (const handle of handles) {
         const card = document.createElement("article");
         card.className = "embed-card";
         card.dataset.handle = handle;
@@ -466,14 +656,17 @@
       }
 
       ensureWidgets(() => {
+        if (epoch !== state.embedEpoch) return;
         try {
           if (window.twttr && window.twttr.widgets && window.twttr.widgets.load) {
             window.twttr.widgets.load(els.feed);
           }
         } catch (e) {
+          if (epoch !== state.embedEpoch) return;
           document.querySelectorAll(".embed-fallback").forEach((el) => el.classList.add("visible"));
         }
         setTimeout(() => {
+          if (epoch !== state.embedEpoch) return;
           document.querySelectorAll(".embed-card").forEach((card) => {
             const iframe = card.querySelector("iframe");
             const fallback = card.querySelector(".embed-fallback");
@@ -483,24 +676,33 @@
       });
     }
 
-    function setHandles(handles, persistChange) {
-      if (persistChange === undefined) persistChange = true;
-      const deduped = [];
-      const seen = new Set();
-      for (const h of handles) {
-        const n = normalizeHandle(h);
-        if (!n) continue;
-        const key = n.toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        deduped.push(n);
-      }
-      state.handles = deduped;
+    function renderAll() {
+      renderTabs();
       renderList();
       renderFeed();
-      if (persistChange) {
-        writeLocal(state.handles);
+    }
+
+    function switchTab(tabId) {
+      if (!state.tabs.some((t) => t.id === tabId)) return;
+      if (state.activeTabId === tabId) return;
+      state.activeTabId = tabId;
+      setStatus("");
+      try {
+        persist();
+      } catch (e) {
+        setStatus((e && e.message) || "Could not save.", "error");
       }
+      renderAll();
+    }
+
+    function setActiveHandles(handles, persistChange) {
+      if (persistChange === undefined) persistChange = true;
+      const tab = activeTab();
+      if (!tab) return;
+      tab.handles = normalizeHandles(handles);
+      renderList();
+      renderFeed();
+      if (persistChange) persist();
     }
 
     function addHandle(raw) {
@@ -509,13 +711,14 @@
         setStatus("Handles must be 1–15 characters: letters, numbers, underscore (optional leading @).", "error");
         return;
       }
-      if (state.handles.some((h) => h.toLowerCase() === handle.toLowerCase())) {
-        setStatus("@" + handle + " is already in your list.", "error");
+      const current = activeHandles();
+      if (current.some((h) => h.toLowerCase() === handle.toLowerCase())) {
+        setStatus("@" + handle + " is already in this tab.", "error");
         return;
       }
       els.addBtn.disabled = true;
       try {
-        setHandles(state.handles.concat([handle]));
+        setActiveHandles(current.concat([handle]));
         setStatus("Added @" + handle + ".", "ok");
         els.input.value = "";
       } catch (e) {
@@ -527,8 +730,65 @@
 
     function removeHandle(handle) {
       try {
-        setHandles(state.handles.filter((h) => h.toLowerCase() !== handle.toLowerCase()));
+        setActiveHandles(activeHandles().filter((h) => h.toLowerCase() !== handle.toLowerCase()));
         setStatus("Removed @" + handle + ".", "ok");
+      } catch (e) {
+        setStatus((e && e.message) || "Could not save.", "error");
+      }
+    }
+
+    function addTab() {
+      const name = window.prompt("New tab name", "New tab");
+      if (name === null) return;
+      const trimmed = String(name).trim() || "New tab";
+      const tab = { id: uid(), name: trimmed, handles: [] };
+      state.tabs.push(tab);
+      state.activeTabId = tab.id;
+      try {
+        persist();
+        setStatus('Created tab "' + trimmed + '".', "ok");
+        renderAll();
+      } catch (e) {
+        setStatus((e && e.message) || "Could not save.", "error");
+      }
+    }
+
+    function renameTab() {
+      const tab = activeTab();
+      if (!tab) return;
+      const name = window.prompt("Rename tab", tab.name);
+      if (name === null) return;
+      const trimmed = String(name).trim();
+      if (!trimmed) {
+        setStatus("Tab name cannot be empty.", "error");
+        return;
+      }
+      tab.name = trimmed;
+      try {
+        persist();
+        setStatus('Renamed tab to "' + trimmed + '".', "ok");
+        renderTabs();
+      } catch (e) {
+        setStatus((e && e.message) || "Could not save.", "error");
+      }
+    }
+
+    function deleteTab() {
+      if (state.tabs.length <= 1) {
+        setStatus("Keep at least one tab.", "error");
+        return;
+      }
+      const tab = activeTab();
+      if (!tab) return;
+      const ok = window.confirm('Delete tab "' + tab.name + '"? Its account list will be removed.');
+      if (!ok) return;
+      const idx = state.tabs.findIndex((t) => t.id === tab.id);
+      state.tabs.splice(idx, 1);
+      state.activeTabId = state.tabs[Math.max(0, Math.min(idx, state.tabs.length - 1))].id;
+      try {
+        persist();
+        setStatus('Deleted tab "' + tab.name + '".', "ok");
+        renderAll();
       } catch (e) {
         setStatus((e && e.message) || "Could not save.", "error");
       }
@@ -538,13 +798,23 @@
       e.preventDefault();
       addHandle(els.input.value);
     });
+    els.addTabBtn.addEventListener("click", addTab);
+    els.renameTabBtn.addEventListener("click", renameTab);
+    els.deleteTabBtn.addEventListener("click", deleteTab);
 
     renderExamples();
 
     (function init() {
-      const handles = readLocal();
+      const loaded = loadState();
+      state.tabs = loaded.tabs;
+      state.activeTabId = loaded.activeTabId;
       els.storageMode.textContent = "(saved in this browser)";
-      setHandles(handles, false);
+      try {
+        persist();
+      } catch {
+        /* ignore on first paint */
+      }
+      renderAll();
       state.ready = true;
     })();
   </script>
